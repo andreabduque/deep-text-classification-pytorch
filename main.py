@@ -21,6 +21,18 @@ from models.QRNN import QRNN
 
 import utils
 
+def count_parameters(model):
+    total_param = 0
+    for name, param in model.named_parameters():
+        if param.requires_grad:
+            num_param = np.prod(param.size())
+            if param.dim() > 1:
+                print(name, ':', 'x'.join(str(x) for x in list(param.size())), '=', num_param)
+            else:
+                print(name, ':', num_param)
+            total_param += num_param
+    return total_param
+
 # Random seed
 np.random.seed(0)
 torch.manual_seed(0)
@@ -29,10 +41,10 @@ torch.manual_seed(0)
 parser = argparse.ArgumentParser(description="Deep NLP Models for Text Classification")
 parser.add_argument('--dataset', type=str, default='MR', choices=DATASETS)
 parser.add_argument('--use_gpu', type=bool, default=torch.cuda.is_available())
-parser.add_argument('--batch_size', type=int, default=64)
+parser.add_argument('--batch_size', type=int, default=20)
 parser.add_argument('--initial_lr', type=float, default=0.01)
 parser.add_argument('--lr_schedule', action='store_true')
-parser.add_argument('--optimizer', type=str, default='Adam')
+parser.add_argument('--optimizer', type=str, default='Adadelta')
 
 subparsers = parser.add_subparsers(help='NLP Model')
 
@@ -69,14 +81,15 @@ CharCNN_parser.set_defaults(model=CharCNN)
 ## VDCNN
 VDCNN_parser = subparsers.add_parser('VDCNN')
 VDCNN_parser.set_defaults(preprocess_level='char')
-VDCNN_parser.add_argument('--dictionary', type=str, default='VDCNNNDictionary', choices=['CharCNNDictionary', 'VDCNNDictionary', 'AllCharDictionary'])
-VDCNN_parser.add_argument('--min_length', type=int, default=1014)
-VDCNN_parser.add_argument('--max_length', type=int, default=1014)
+VDCNN_parser.add_argument('--dictionary', type=str, default='VDCNNDictionary', choices=['CharCNNDictionary', 'VDCNNDictionary', 'AllCharDictionary'])
+VDCNN_parser.add_argument('--min_length', type=int, default=1024)
+VDCNN_parser.add_argument('--max_length', type=int, default=1024)
+VDCNN_parser.add_argument('--sort_dataset', action='store_true')
 VDCNN_parser.add_argument('--epochs', type=int, default=3)
 VDCNN_parser.add_argument('--depth', type=int, default=29, choices=[9, 17, 29, 49])
 VDCNN_parser.add_argument('--embed_size', type=int, default=16)
-VDCNN_parser.add_argument('--optional_shortcut', type=bool, default=True)
-VDCNN_parser.add_argument('--k', type=int, default=10)
+VDCNN_parser.add_argument('--optional_shortcut', type=bool, default=False)
+VDCNN_parser.add_argument('--k', type=int, default=8)
 VDCNN_parser.set_defaults(model=VDCNN)
 
 ## QRNN
@@ -124,12 +137,15 @@ logger.info("Making dataset & dataloader...")
 train_dataset = TextDataset(train_data, dictionary, args.sort_dataset, args.min_length, args.max_length)
 train_dataloader = TextDataLoader(dataset=train_dataset, dictionary=dictionary, batch_size=args.batch_size)
 val_dataset = TextDataset(val_data, dictionary, args.sort_dataset, args.min_length, args.max_length)
-val_dataloader = TextDataLoader(dataset=val_dataset, dictionary=dictionary, batch_size=64)
+val_dataloader = TextDataLoader(dataset=val_dataset, dictionary=dictionary, batch_size=args.batch_size)
 test_dataset = TextDataset(test_data, dictionary, args.sort_dataset, args.min_length, args.max_length)
-test_dataloader = TextDataLoader(dataset=test_dataset, dictionary=dictionary, batch_size=64)
+test_dataloader = TextDataLoader(dataset=test_dataset, dictionary=dictionary, batch_size=args.batch_size)
 
 logger.info("Constructing model...")
 model = args.model(n_classes=preprocessor.n_classes, dictionary=dictionary, args=args)
+
+print('Numero de parametros ', count_parameters(model))
+
 if args.use_gpu:
     model = model.cuda() 
 
@@ -152,3 +168,6 @@ logger.info('Best Model: {}'.format(trainer.best_checkpoint_filepath))
 model.load_state_dict(torch.load(trainer.best_checkpoint_filepath)) # load best model
 evaluator = Evaluator(model, test_dataloader, use_gpu=args.use_gpu, logger=logger)
 evaluator.evaluate()
+
+for parameter in model.parameters():
+    print(parameter)

@@ -7,17 +7,26 @@ class ConvolutionalBlock(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, first_stride=1):
         super(ConvolutionalBlock, self).__init__()
         self.sequential = nn.Sequential(
-            nn.Conv1d(in_channels, out_channels, kernel_size=kernel_size, stride=first_stride, padding=1),
-            nn.BatchNorm1d(num_features=out_channels),
+            # nn.Conv1d(in_channels, out_channels, kernel_size=kernel_size, stride=first_stride, padding=1),
+            
+			nn.Conv1d(in_channels, out_channels, kernel_size=kernel_size, stride=first_stride, padding=1, groups=in_channels), # depthwise 
+			nn.Conv1d(out_channels, out_channels, kernel_size=1, stride=1, padding=0), # depthwise 		
+						
+			nn.BatchNorm1d(num_features=out_channels),
             nn.ReLU(),
-            nn.Conv1d(out_channels, out_channels, kernel_size=kernel_size, stride=1, padding=1),
+			
+            # nn.Conv1d(out_channels, out_channels, kernel_size=kernel_size, stride=1, padding=1),
+			
+			nn.Conv1d(out_channels, out_channels, kernel_size=kernel_size, stride=1, padding=1, groups=out_channels), # depthwise 
+			nn.Conv1d(out_channels, out_channels, kernel_size=1, stride=1, padding=0), 
+			
+			
             nn.BatchNorm1d(num_features=out_channels),
             nn.ReLU()
         )
         
-    def forward(self, x):
-        
-        return self.sequential(x)
+    def forward(self, x):        
+    	return self.sequential(x)
 
 class KMaxPool(nn.Module):
     
@@ -28,7 +37,7 @@ class KMaxPool(nn.Module):
     def forward(self, x):
         # x : batch_size, channel, time_steps
         if self.k == 'half':
-            time_steps = x.shape(2)
+            time_steps = list(x.shape)[2]
             self.k = time_steps//2
         kmax, kargmax = x.topk(self.k, dim=2)
         return kmax
@@ -39,7 +48,7 @@ class ResidualBlock(nn.Module):
         super(ResidualBlock, self).__init__()
         self.optional_shortcut = optional_shortcut
         self.downsample = downsample
-        
+    
         if self.downsample:
             if downsample_type == 'resnet':
                 self.pool = None
@@ -111,17 +120,17 @@ class VDCNN(nn.Module):
             
         for i in range(n_conv_layers['conv_block_128']):
             if i == 0:
-                conv_layers.append(ResidualBlock(64, 128, downsample=True, optional_shortcut=optional_shortcut))
+                conv_layers.append(ResidualBlock(64, 128, downsample=True, downsample_type='kmaxpool', optional_shortcut=optional_shortcut))
             conv_layers.append(ResidualBlock(128, 128, optional_shortcut=optional_shortcut))
 
         for i in range(n_conv_layers['conv_block_256']):
             if i == 0:
-                conv_layers.append(ResidualBlock(128, 256, downsample=True, optional_shortcut=optional_shortcut))
+                conv_layers.append(ResidualBlock(128, 256, downsample=True, downsample_type='kmaxpool', optional_shortcut=optional_shortcut))
             conv_layers.append(ResidualBlock(256, 256, optional_shortcut=optional_shortcut))
 
         for i in range(n_conv_layers['conv_block_512']):
             if i == 0:
-                conv_layers.append(ResidualBlock(256, 512, downsample=True, optional_shortcut=optional_shortcut))
+                conv_layers.append(ResidualBlock(256, 512, downsample=True, downsample_type='kmaxpool', optional_shortcut=optional_shortcut))
             conv_layers.append(ResidualBlock(512, 512, optional_shortcut=optional_shortcut))
         
         self.conv_layers = nn.Sequential(*conv_layers)
@@ -141,15 +150,15 @@ class VDCNN(nn.Module):
         x = x.transpose(1,2) # (batch_size, sequence_length, embed_size) -> (batch_size, embed_size, sequence_length)
         x = self.conv_layers(x)
         x = self.kmax_pooling(x)
-        print(x.shape)
+        # print(x.shape)
         x = x.view(x.size(0), -1)
-        print(x.shape)
+        # print(x.shape)
         x = self.linear_layers(x)
 
         return x
     
-if __name__ == '__main__':
+# if __name__ == '__main__':
     
-    model = VDCNN(depth=29, vocabulary_size=29, embed_size=16, n_classes=2, k=2)
-    rand_inputs = Variable(torch.LongTensor(8, 1104).random_(0, 29))
-    print(model(rand_inputs))
+#     model = VDCNN(depth=9, vocabulary_size=29, embed_size=16, n_classes=2, k=2)
+#     rand_inputs = Variable(torch.LongTensor(8, 1104).random_(0, 29))
+#     print(model(rand_inputs))
