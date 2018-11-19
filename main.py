@@ -168,6 +168,3 @@ logger.info('Best Model: {}'.format(trainer.best_checkpoint_filepath))
 model.load_state_dict(torch.load(trainer.best_checkpoint_filepath)) # load best model
 evaluator = Evaluator(model, test_dataloader, use_gpu=args.use_gpu, logger=logger)
 evaluator.evaluate()
-
-for parameter in model.parameters():
-    print(parameter)
