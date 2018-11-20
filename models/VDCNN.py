@@ -2,6 +2,8 @@ import torch
 from torch import nn
 from torch.autograd import Variable
 
+torch.manual_seed(1)
+
 class ConvolutionalBlock(nn.Module):
     
     def __init__(self, in_channels, out_channels, kernel_size=3, first_stride=1):
