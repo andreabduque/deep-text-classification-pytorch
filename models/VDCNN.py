@@ -7,18 +7,18 @@ class ConvolutionalBlock(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, first_stride=1):
         super(ConvolutionalBlock, self).__init__()
         self.sequential = nn.Sequential(
-            # nn.Conv1d(in_channels, out_channels, kernel_size=kernel_size, stride=first_stride, padding=1),
+            nn.Conv1d(in_channels, out_channels, kernel_size=kernel_size, stride=first_stride, padding=1),
             
-			nn.Conv1d(in_channels, out_channels, kernel_size=kernel_size, stride=first_stride, padding=1, groups=in_channels), # depthwise 
-			nn.Conv1d(out_channels, out_channels, kernel_size=1, stride=1, padding=0), # depthwise 		
+			# nn.Conv1d(in_channels, out_channels, kernel_size=kernel_size, stride=first_stride, padding=1, groups=in_channels), # depthwise 
+			# nn.Conv1d(out_channels, out_channels, kernel_size=1, stride=1, padding=0), # depthwise 		
 						
 			nn.BatchNorm1d(num_features=out_channels),
             nn.ReLU(),
 			
-            # nn.Conv1d(out_channels, out_channels, kernel_size=kernel_size, stride=1, padding=1),
+            nn.Conv1d(out_channels, out_channels, kernel_size=kernel_size, stride=1, padding=1),
 			
-			nn.Conv1d(out_channels, out_channels, kernel_size=kernel_size, stride=1, padding=1, groups=out_channels), # depthwise 
-			nn.Conv1d(out_channels, out_channels, kernel_size=1, stride=1, padding=0), 
+			# nn.Conv1d(out_channels, out_channels, kernel_size=kernel_size, stride=1, padding=1, groups=out_channels), # depthwise 
+			# nn.Conv1d(out_channels, out_channels, kernel_size=1, stride=1, padding=0), 
 			
 			
             nn.BatchNorm1d(num_features=out_channels),
@@ -65,6 +65,7 @@ class ResidualBlock(nn.Module):
             first_stride = 1
 
         self.convolutional_block = ConvolutionalBlock(in_channels, out_channels, first_stride=first_stride)
+
                 
         if self.optional_shortcut and self.downsample:
             self.shortcut = nn.Conv1d(in_channels, out_channels, kernel_size=1, stride=2)
@@ -97,18 +98,18 @@ class VDCNN(nn.Module):
         k = args.k # 8
         
         if depth == 9:
-            n_conv_layers = {'conv_block_512':2, 'conv_block_256':2,
-                             'conv_block_128':2, 'conv_block_64':2}
+            n_conv_layers = {'conv_block_512':0, 'conv_block_256':0,
+                             'conv_block_128':0, 'conv_block_64':1}
         elif depth == 17:
             n_conv_layers = {'conv_block_512':2, 'conv_block_256':2,
                              'conv_block_128':2, 'conv_block_64':2}
         elif depth == 29:
-            n_conv_layers = {'conv_block_512':4, 'conv_block_256':4,
-                             'conv_block_128':10, 'conv_block_64':10}
+            n_conv_layers = {'conv_block_512':2, 'conv_block_256':2,
+                             'conv_block_128':5, 'conv_block_64':5}
         elif depth == 49:
-            n_conv_layers = {'conv_block_512':6, 'conv_block_256':10,
-                             'conv_block_128':16, 'conv_block_64':16}
-        
+            n_conv_layers = {'conv_block_512':3, 'conv_block_256':5,
+                             'conv_block_128':128, 'conv_block_64':8}
+    
         # quantization
         self.embedding = nn.Embedding(num_embeddings=vocabulary_size, embedding_dim=16, padding_idx=0)
         
@@ -116,22 +117,27 @@ class VDCNN(nn.Module):
         conv_layers.append(nn.Conv1d(16, 64, kernel_size=3, padding=1))
 
         for i in range(n_conv_layers['conv_block_64']):
-            conv_layers.append(ResidualBlock(64, 64, optional_shortcut=optional_shortcut))
-            
-        for i in range(n_conv_layers['conv_block_128']):
-            if i == 0:
-                conv_layers.append(ResidualBlock(64, 128, downsample=True, downsample_type='kmaxpool', optional_shortcut=optional_shortcut))
-            conv_layers.append(ResidualBlock(128, 128, optional_shortcut=optional_shortcut))
+            conv_layers.append(ResidualBlock(64, 64, optional_shortcut=optional_shortcut))  
 
-        for i in range(n_conv_layers['conv_block_256']):
-            if i == 0:
-                conv_layers.append(ResidualBlock(128, 256, downsample=True, downsample_type='kmaxpool', optional_shortcut=optional_shortcut))
+        conv_layers.append(ResidualBlock(64, 128, downsample=True, downsample_type='kmaxpool', optional_shortcut=optional_shortcut))
+
+        for i in range(n_conv_layers['conv_block_128']):
+            conv_layers.append(ResidualBlock(128, 128, optional_shortcut=optional_shortcut)) 
+
+        conv_layers.append(ResidualBlock(128, 256, downsample=True, downsample_type='kmaxpool', optional_shortcut=optional_shortcut))       
+            
+        for i in range(n_conv_layers['conv_block_256']):                
+            conv_layers.append(ResidualBlock(256, 256, optional_shortcut=optional_shortcut))        
+
+        for i in range(n_conv_layers['conv_block_512']):                
             conv_layers.append(ResidualBlock(256, 256, optional_shortcut=optional_shortcut))
 
-        for i in range(n_conv_layers['conv_block_512']):
-            if i == 0:
-                conv_layers.append(ResidualBlock(256, 512, downsample=True, downsample_type='kmaxpool', optional_shortcut=optional_shortcut))
+        conv_layers.append(ResidualBlock(256, 512, downsample=True, downsample_type='kmaxpool', optional_shortcut=optional_shortcut))
+
+        for i in range(n_conv_layers['conv_block_512']):                
             conv_layers.append(ResidualBlock(512, 512, optional_shortcut=optional_shortcut))
+
+        print(conv_layers)
         
         self.conv_layers = nn.Sequential(*conv_layers)
         self.kmax_pooling = KMaxPool(k=k)

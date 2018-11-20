@@ -24,7 +24,7 @@ import utils
 def count_parameters(model):
     total_param = 0
     for name, param in model.named_parameters():
-        if param.requires_grad:
+        if param.requires_grad and 'linear_layers' not in name:
             num_param = np.prod(param.size())
             if param.dim() > 1:
                 print(name, ':', 'x'.join(str(x) for x in list(param.size())), '=', num_param)
@@ -44,7 +44,7 @@ parser.add_argument('--use_gpu', type=bool, default=torch.cuda.is_available())
 parser.add_argument('--batch_size', type=int, default=20)
 parser.add_argument('--initial_lr', type=float, default=0.01)
 parser.add_argument('--lr_schedule', action='store_true')
-parser.add_argument('--optimizer', type=str, default='Adadelta')
+parser.add_argument('--optimizer', type=str, default='Adam')
 
 subparsers = parser.add_subparsers(help='NLP Model')
 
@@ -152,7 +152,7 @@ if args.use_gpu:
 logger.info("Training...")
 trainable_params = [p for p in model.parameters() if p.requires_grad]
 if args.optimizer == 'Adam':
-    optimizer = Adam(params=trainable_params, lr=args.initial_lr)
+    optimizer = Adam(params=trainable_params, lr=0.0001)
 if args.optimizer == 'Adadelta':
     optimizer = Adadelta(params=trainable_params, lr=args.initial_lr, weight_decay=0.95)
 lr_plateau = lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.7, patience=5, min_lr=0.0001)
@@ -168,6 +168,3 @@ logger.info('Best Model: {}'.format(trainer.best_checkpoint_filepath))
 model.load_state_dict(torch.load(trainer.best_checkpoint_filepath)) # load best model
 evaluator = Evaluator(model, test_dataloader, use_gpu=args.use_gpu, logger=logger)
 evaluator.evaluate()
-
-for parameter in model.parameters():
-    print(parameter)
